@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import importlib
 import logging
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 
 from opencontractau.models.ocds import ReleasePackage
@@ -93,7 +93,7 @@ async def fetch_releases(
         Case-insensitive.
     since:
         Optional date filter. Supported on scrapers that expose a date
-        parameter (ACT via SoQL WHERE, NSW_LIVE via from_date). For
+        parameter (ACT via SoQL WHERE, AUSTENDER via from_date). For
         other scrapers the parameter is silently ignored and the scraper
         uses its default recency window (usually "recent" mode / current
         financial year).
@@ -135,13 +135,18 @@ async def fetch_releases(
         if key == "ACT":
             # SoQL WHERE clause; Socrata date literals use ISO 8601.
             kwargs.setdefault("where", f"execution_date > '{since.isoformat()}'")
-        elif key == "NSW_LIVE":
-            # NSW live scraper accepts a datetime.
-            kwargs.setdefault("from_date", datetime(since.year, since.month, since.day))
         elif key == "AUSTENDER":
             # Federal OCDS endpoint uses from_date / to_date date objects.
             kwargs.setdefault("from_date", since)
-        # QLD_TMR, QLD_MULTI, NT, TAS, VIC: use their built-in recency windows.
+        # Everything else, NSW_LIVE included, uses its built-in recency
+        # window. NSW_LIVE had a from_date translation here until 0.15.1;
+        # the scraper was rewritten to walk buy.nsw's notices list, which
+        # takes max_pages and sorts newest-updated-first and has no date
+        # parameter at all. The stale translation raised TypeError on
+        # every `since` call, so Demiton's NSW award harvest returned
+        # nothing from 2026-06-23 to 2026-08-28. test_api_since_translation
+        # asserts each translation still names a parameter the scraper
+        # accepts, so the next signature change fails in CI.
 
     logger.info("opencontractau.fetch_releases: jurisdiction=%s since=%s", key, since)
     return await scrape_fn(**kwargs)
